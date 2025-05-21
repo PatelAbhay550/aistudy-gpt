@@ -9,12 +9,13 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { answerQuestion } from '@/ai/flows/answer-question';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, User, Bot, Save, LogIn } from 'lucide-react';
+import { Loader2, User, Bot, Save, LogIn, Trash2, Check, X } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp, query, where, orderBy, limit, getDocs, doc, setDoc, getDoc, updateDoc, Timestamp } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, where, orderBy, limit, getDocs, doc, deleteDoc, updateDoc, Timestamp } from 'firebase/firestore';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 
 interface Message {
   id: string;
@@ -40,6 +41,8 @@ export default function AITutoringPage() {
   const [chatLoadedForTopic, setChatLoadedForTopic] = useState<string | null>(null);
   const [userTopics, setUserTopics] = useState<UserTopic[]>([]);
   const [loadingTopics, setLoadingTopics] = useState<boolean>(false);
+  const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
+  const [topicToDelete, setTopicToDelete] = useState<UserTopic | null>(null);
 
   const { toast } = useToast();
   const { user, signInWithGoogle } = useAuth();
@@ -78,6 +81,7 @@ export default function AITutoringPage() {
         }
       } else {
         setUserTopics([]);
+        setSelectedTopics([]);
       }
     }
     loadUserTopics();
@@ -253,6 +257,89 @@ export default function AITutoringPage() {
     }
   };
 
+  const toggleTopicSelection = (topicId: string) => {
+    setSelectedTopics(prev =>
+      prev.includes(topicId)
+        ? prev.filter(id => id !== topicId)
+        : [...prev, topicId]
+    );
+  };
+
+  const confirmDeleteTopic = (topic: UserTopic) => {
+    setTopicToDelete(topic);
+  };
+
+  const deleteTopic = async () => {
+    if (!topicToDelete || !user) return;
+
+    try {
+      // Delete the chat document and all its messages
+      await deleteDoc(doc(db, 'chats', topicToDelete.chatId));
+      
+      // Remove from local state
+      setUserTopics(prev => prev.filter(t => t.chatId !== topicToDelete.chatId));
+      
+      // If the deleted topic was the current one, reset the chat
+      if (topicToDelete.topic === topic) {
+        setCurrentChatId(null);
+        setChatHistory([]);
+        setChatLoadedForTopic(null);
+      }
+
+      // Clear selection if it was selected
+      setSelectedTopics(prev => prev.filter(id => id !== topicToDelete.chatId));
+
+      toast({
+        title: 'Topic deleted',
+        description: `"${topicToDelete.topic}" and its conversation have been deleted.`,
+      });
+    } catch (error) {
+      console.error('Error deleting topic:', error);
+      toast({
+        title: 'Error deleting topic',
+        variant: 'destructive',
+      });
+    } finally {
+      setTopicToDelete(null);
+    }
+  };
+
+  const deleteSelectedTopics = async () => {
+    if (!user || selectedTopics.length === 0) return;
+
+    try {
+      // Delete all selected topics
+      await Promise.all(
+        selectedTopics.map(async chatId => {
+          await deleteDoc(doc(db, 'chats', chatId));
+        })
+      );
+
+      // Update local state
+      setUserTopics(prev => prev.filter(t => !selectedTopics.includes(t.chatId)));
+
+      // If current topic was deleted, reset chat
+      if (selectedTopics.includes(currentChatId || '')) {
+        setCurrentChatId(null);
+        setChatHistory([]);
+        setChatLoadedForTopic(null);
+      }
+
+      toast({
+        title: 'Topics deleted',
+        description: `${selectedTopics.length} topic(s) and their conversations have been deleted.`,
+      });
+
+      setSelectedTopics([]);
+    } catch (error) {
+      console.error('Error deleting topics:', error);
+      toast({
+        title: 'Error deleting topics',
+        variant: 'destructive',
+      });
+    }
+  };
+
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)] md:h-[calc(100vh-5rem)]">
       <Card className="mb-4">
@@ -271,20 +358,64 @@ export default function AITutoringPage() {
             
             {user && (
               <div className="space-y-2">
-                <p className="text-sm font-medium">Your Topics</p>
+                <div className="flex justify-between items-center">
+                  <p className="text-sm font-medium">Your Topics</p>
+                  {selectedTopics.length > 0 && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={deleteSelectedTopics}
+                      className="h-8"
+                    >
+                      <Trash2 className="h-4 w-4 mr-1" />
+                      Delete Selected
+                    </Button>
+                  )}
+                </div>
                 {loadingTopics ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : userTopics.length > 0 ? (
                   <div className="flex flex-wrap gap-2">
                     {userTopics.map((userTopic) => (
-                      <Badge 
-                        key={userTopic.chatId}
-                        variant={userTopic.topic === topic ? 'outline' : 'outline'}
-                        className="cursor-pointer hover:bg-blue-100 text-blue-800"
-                        onClick={() => switchToTopic(userTopic)}
-                      >
-                        {userTopic.topic}
-                      </Badge>
+                      <div key={userTopic.chatId} className="relative">
+                        <Badge 
+                          variant={userTopic.topic === topic ? 'default' : 'outline'}
+                          className={`cursor-pointer hover:bg-blue-100 text-blue-800 pr-8 ${
+                            selectedTopics.includes(userTopic.chatId) ? 'bg-blue-100 border-blue-300' : ''
+                          }`}
+                          onClick={() => switchToTopic(userTopic)}
+                        >
+                          {userTopic.topic}
+                        </Badge>
+                        <div className="absolute right-1 top-1/2 -translate-y-1/2 flex gap-1">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleTopicSelection(userTopic.chatId);
+                            }}
+                            className={`p-1 rounded-full ${
+                              selectedTopics.includes(userTopic.chatId) 
+                                ? 'bg-blue-500 text-white' 
+                                : 'text-gray-400 hover:text-gray-600'
+                            }`}
+                          >
+                            {selectedTopics.includes(userTopic.chatId) ? (
+                              <Check className="h-3 w-3" />
+                            ) : (
+                              <div className="h-3 w-3 border border-gray-400 rounded-sm" />
+                            )}
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              confirmDeleteTopic(userTopic);
+                            }}
+                            className="p-1 text-gray-400 hover:text-red-500 rounded-full hover:bg-red-50"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      </div>
                     ))}
                   </div>
                 ) : (
@@ -295,6 +426,28 @@ export default function AITutoringPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={!!topicToDelete} onOpenChange={(open) => !open && setTopicToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this topic?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the topic "<span className="font-semibold">{topicToDelete?.topic}</span>" and all its conversation history.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={deleteTopic}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {!user && (
         <Alert className="mb-4">
@@ -330,7 +483,7 @@ export default function AITutoringPage() {
                   <div
                     className={`rounded-lg p-3 max-w-[70%] text-sm shadow-md ${
                       msg.type === 'user'
-                        ? ' text-blue-800'
+                        ? 'bg-primary text-primary-foreground'
                         : 'bg-secondary text-secondary-foreground'
                     }`}
                   >

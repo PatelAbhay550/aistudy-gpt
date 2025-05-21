@@ -13,7 +13,7 @@ export default function AboutPage() {
       <Card className="shadow-lg rounded-xl overflow-hidden">
         <CardHeader className="bg-primary/10 p-6">
           <CardTitle className="text-3xl font-bold text-center text-primary">
-            About AbAssistant
+            About AIStudy GPT
           </CardTitle>
           <CardDescription className="text-center text-lg text-foreground/80 pt-1">
             Your AI-powered helper, designed to assist you.
@@ -21,7 +21,7 @@ export default function AboutPage() {
         </CardHeader>
         <CardContent className="p-6 space-y-4">
           <p className="text-base text-foreground/90 leading-relaxed text-center">
-            AbAssistant is a project developed by Abhay Raj Patel to explore the capabilities of AI and provide useful tools for everyday academic and research tasks.
+            AIStudy GPT is a project developed by Abhay Raj Patel to explore the capabilities of AI and provide useful tools for everyday academic and research tasks.
           </p>
         </CardContent>
       </Card>
@@ -49,7 +49,7 @@ export default function AboutPage() {
             </div>
           </div>
           <p className="text-base text-foreground/90 leading-relaxed text-center pt-2">
-            AbAssistant is proudly developed by Abhay Raj Patel, a passionate software developer from India.
+            AIStudy GPT is proudly developed by Abhay Raj Patel, a passionate software developer from India.
             You can find more of his work and connect with him on GitHub.
           </p>
           <div className="pt-4 text-center">

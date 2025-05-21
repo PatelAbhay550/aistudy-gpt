@@ -21,7 +21,7 @@ export const metadata: Metadata = {
     description: 'AI Study Helper: Your AI-powered study companion for personalized learning and assistance make by Abhay Raj Patel',
     openGraph: {
         title: 'AiStudy GPT',
-        description: 'AI Study Helper: Your AI-powered study companion for personalized learning and assistance make by Abhay Raj Patel',
+        description: 'AI Study GPT: Your AI-powered study companion for personalized learning and assistance make by Abhay Raj Patel',
         url: 'https://aistudy-gpt.vercel.app/',
         siteName: 'AiStudy GPT',
         images: [

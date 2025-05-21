@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useRef, useEffect, type FormEvent } from 'react';
@@ -15,6 +14,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, serverTimestamp, query, where, orderBy, limit, getDocs, doc, setDoc, getDoc, updateDoc, Timestamp } from 'firebase/firestore';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 
 interface Message {
   id: string;
@@ -22,6 +22,12 @@ interface Message {
   text: string;
   topic?: string;
   timestamp?: Timestamp;
+}
+
+interface UserTopic {
+  topic: string;
+  lastUpdated: Timestamp;
+  chatId: string;
 }
 
 export default function AITutoringPage() {
@@ -32,6 +38,8 @@ export default function AITutoringPage() {
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   const [chatLoadedForTopic, setChatLoadedForTopic] = useState<string | null>(null);
+  const [userTopics, setUserTopics] = useState<UserTopic[]>([]);
+  const [loadingTopics, setLoadingTopics] = useState<boolean>(false);
 
   const { toast } = useToast();
   const { user, signInWithGoogle } = useAuth();
@@ -42,6 +50,38 @@ export default function AITutoringPage() {
       scrollAreaRef.current.scrollTo({ top: scrollAreaRef.current.scrollHeight, behavior: 'smooth' });
     }
   }, [chatHistory]);
+
+  // Load user's topics when user logs in
+  useEffect(() => {
+    async function loadUserTopics() {
+      if (user) {
+        setLoadingTopics(true);
+        try {
+          const chatsRef = collection(db, 'chats');
+          const q = query(
+            chatsRef,
+            where('userId', '==', user.uid),
+            orderBy('updatedAt', 'desc')
+          );
+          const querySnapshot = await getDocs(q);
+          const topics = querySnapshot.docs.map(doc => ({
+            topic: doc.data().topic,
+            lastUpdated: doc.data().updatedAt,
+            chatId: doc.id
+          }));
+          setUserTopics(topics);
+        } catch (error) {
+          console.error('Error loading user topics:', error);
+          toast({ title: 'Error loading your topics', variant: 'destructive' });
+        } finally {
+          setLoadingTopics(false);
+        }
+      } else {
+        setUserTopics([]);
+      }
+    }
+    loadUserTopics();
+  }, [user, toast]);
 
   // Effect to load existing chat for the current topic if user logs in or topic changes
   useEffect(() => {
@@ -87,13 +127,10 @@ export default function AITutoringPage() {
         // If user logs out, clear Firebase-related chat state
         setCurrentChatId(null);
         setChatLoadedForTopic(null);
-        // Optionally, clear local chat history or keep it
-        // setChatHistory([]); 
       }
     }
     loadChatForTopic();
   }, [user, topic, toast, chatLoadedForTopic]);
-
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -120,7 +157,7 @@ export default function AITutoringPage() {
       type: 'user', 
       text: userMessageText, 
       topic,
-      timestamp: Timestamp.now() // For local display and potential Firestore save
+      timestamp: Timestamp.now()
     };
     setChatHistory(prev => [...prev, userMessage]);
     setQuestion('');
@@ -140,6 +177,12 @@ export default function AITutoringPage() {
         });
         activeChatId = chatRef.id;
         setCurrentChatId(activeChatId);
+        
+        // Add the new topic to user's topics list
+        setUserTopics(prev => [
+          { topic, lastUpdated: Timestamp.now(), chatId: activeChatId! },
+          ...prev
+        ]);
       }
 
       // Save user message to Firestore if logged in and chat exists
@@ -147,11 +190,18 @@ export default function AITutoringPage() {
         await addDoc(collection(db, `chats/${activeChatId}/messages`), {
           type: 'user',
           text: userMessageText,
-          topic: topic, // Storing topic with message for context, might be redundant if chat doc has it
+          topic: topic,
           timestamp: serverTimestamp(),
         });
         // Update chat's updatedAt timestamp
         await updateDoc(doc(db, 'chats', activeChatId), { updatedAt: serverTimestamp() });
+        
+        // Update the topic's lastUpdated in the local state
+        setUserTopics(prev => prev.map(t => 
+          t.chatId === activeChatId 
+            ? { ...t, lastUpdated: Timestamp.now() }
+            : t
+        ));
       }
       
       // Get AI answer
@@ -160,7 +210,7 @@ export default function AITutoringPage() {
         id: (Date.now() + 1).toString(), 
         type: 'ai', 
         text: response.answer,
-        timestamp: Timestamp.now() // For local display and potential Firestore save
+        timestamp: Timestamp.now()
       };
       setChatHistory(prev => [...prev, aiMessage]);
 
@@ -171,7 +221,6 @@ export default function AITutoringPage() {
           text: response.answer,
           timestamp: serverTimestamp(),
         });
-         // Update chat's updatedAt timestamp
         await updateDoc(doc(db, 'chats', activeChatId), { updatedAt: serverTimestamp() });
       }
 
@@ -182,7 +231,6 @@ export default function AITutoringPage() {
         description: 'Failed to process message or get an answer. Please try again.',
         variant: 'destructive',
       });
-      // Remove the optimistic user message if saving failed
       setChatHistory(prev => prev.filter(msg => msg.id !== userMessage.id));
     } finally {
       setIsLoading(false);
@@ -192,15 +240,18 @@ export default function AITutoringPage() {
 
   const handleTopicChange = (newTopic: string) => {
     setTopic(newTopic);
-    // Reset chat loaded state so it attempts to load for the new topic
-    // If newTopic is same as current, it won't reload due to chatLoadedForTopic check
     if (newTopic !== chatLoadedForTopic) {
       setChatLoadedForTopic(null); 
-      setCurrentChatId(null); // Reset current chat ID when topic changes
-      setChatHistory([]); // Clear chat history when topic changes, it will be reloaded
+      setCurrentChatId(null);
+      setChatHistory([]);
     }
   };
 
+  const switchToTopic = (selectedTopic: UserTopic) => {
+    if (selectedTopic.topic !== topic) {
+      handleTopicChange(selectedTopic.topic);
+    }
+  };
 
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)] md:h-[calc(100vh-5rem)]">
@@ -210,12 +261,38 @@ export default function AITutoringPage() {
           <CardDescription>Changing the topic will start a new chat session or load an existing one for that topic if you are logged in.</CardDescription>
         </CardHeader>
         <CardContent>
-          <Input
-            placeholder="e.g., Quantum Physics, Shakespearean Literature"
-            value={topic}
-            onChange={(e) => handleTopicChange(e.target.value)}
-            className="text-base"
-          />
+          <div className="space-y-4">
+            <Input
+              placeholder="e.g., Quantum Physics, Shakespearean Literature"
+              value={topic}
+              onChange={(e) => handleTopicChange(e.target.value)}
+              className="text-base"
+            />
+            
+            {user && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Your Topics</p>
+                {loadingTopics ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : userTopics.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {userTopics.map((userTopic) => (
+                      <Badge 
+                        key={userTopic.chatId}
+                        variant={userTopic.topic === topic ? 'outline' : 'outline'}
+                        className="cursor-pointer hover:bg-blue-100 text-blue-800"
+                        onClick={() => switchToTopic(userTopic)}
+                      >
+                        {userTopic.topic}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No previous topics found</p>
+                )}
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
 
@@ -253,7 +330,7 @@ export default function AITutoringPage() {
                   <div
                     className={`rounded-lg p-3 max-w-[70%] text-sm shadow-md ${
                       msg.type === 'user'
-                        ? 'bg-primary text-primary-foreground'
+                        ? ' text-blue-800'
                         : 'bg-secondary text-secondary-foreground'
                     }`}
                   >
@@ -261,7 +338,6 @@ export default function AITutoringPage() {
                     <p style={{ whiteSpace: 'pre-wrap' }}>{msg.text}</p>
                      {msg.timestamp && (
                         <p className="text-xs mt-1 opacity-70 text-right">
-                          {/* Ensure timestamp is a Firebase Timestamp before calling toDate */}
                           {msg.timestamp instanceof Timestamp ? new Date(msg.timestamp.toDate()).toLocaleTimeString() : ''}
                         </p>
                       )}

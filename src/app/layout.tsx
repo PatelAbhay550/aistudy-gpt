@@ -26,7 +26,7 @@ export const metadata: Metadata = {
         siteName: 'AiStudy GPT',
         images: [
             {
-            url: '/og-image.png',
+            url: 'https://github.com/PatelAbhay550/aistudy-gpt/blob/main/public/aistudy-gpt-image.png?raw=true',
             width: 1200,
             height: 630,
             },

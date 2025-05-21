@@ -87,7 +87,7 @@ export default function AITutoringPage() {
     loadUserTopics();
   }, [user, toast]);
 
-  // Effect to load existing chat for the current topic if user logs in or topic changes
+  // Effect to load existing chat for the current topic if user logs in or topic change
   useEffect(() => {
     async function loadChatForTopic() {
       if (user && topic && topic !== chatLoadedForTopic) {

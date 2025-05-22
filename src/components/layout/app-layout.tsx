@@ -1,4 +1,3 @@
-
 "use client"
 import type { ReactNode } from 'react';
 import {
@@ -13,7 +12,7 @@ import { SidebarNav } from './sidebar-nav';
 import { Logo } from '@/components/icons/logo';
 import { Button } from '@/components/ui/button';
 import { usePathname } from 'next/navigation';
-import { Menu, LogIn, LogOut, UserCircle, Settings } from 'lucide-react';
+import { Menu, LogIn, LogOut, UserCircle, Settings, Home } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -91,6 +90,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={()=> window.location.href = '/'}>
+                    <Home className="mr-2 h-4 w-4" />
+                   
+                    <span>Home</span>
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={()=> window.location.href = '/about'}>
                     <UserCircle className="mr-2 h-4 w-4" />
                    

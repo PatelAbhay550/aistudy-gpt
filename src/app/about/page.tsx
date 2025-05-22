@@ -13,7 +13,7 @@ export default function AboutPage() {
       <Card className="shadow-lg rounded-xl overflow-hidden">
         <CardHeader className="bg-primary/10 p-6">
           <CardTitle className="text-3xl font-bold text-center text-primary">
-            About AIStudy GPT
+             About <a href="/"> AIStudy GPT</a>
           </CardTitle>
           <CardDescription className="text-center text-lg text-foreground/80 pt-1">
             Your AI-powered helper, designed to assist you.
